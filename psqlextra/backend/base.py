@@ -1,5 +1,4 @@
 import logging
-
 from typing import TYPE_CHECKING
 
 from django import VERSION
@@ -46,6 +45,7 @@ class DatabaseWrapper(Wrapper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # Skip the compiler validation for Django 5.x as it has different internals
         if VERSION >= (5, 0):
             return
 
@@ -61,19 +61,21 @@ class DatabaseWrapper(Wrapper):
         if not isinstance(self.ops, self.ops_class):
             self.ops = self.ops_class(self)
 
-        for expected_compiler_class in self.ops.compiler_classes:
-            compiler_class = self.ops.compiler(expected_compiler_class.__name__)
+        # Only proceed with compiler validation if compiler_classes attribute exists
+        if hasattr(self.ops, "compiler_classes"):
+            for expected_compiler_class in self.ops.compiler_classes:
+                compiler_class = self.ops.compiler(expected_compiler_class.__name__)
 
-            if not issubclass(compiler_class, expected_compiler_class):
-                logger.warning(
-                    "Compiler '%s.%s' is not properly deriving from '%s.%s'."
-                    % (
-                        compiler_class.__module__,
-                        compiler_class.__name__,
-                        expected_compiler_class.__module__,
-                        expected_compiler_class.__name__,
+                if not issubclass(compiler_class, expected_compiler_class):
+                    logger.warning(
+                        "Compiler '%s.%s' is not properly deriving from '%s.%s'."
+                        % (
+                            compiler_class.__module__,
+                            compiler_class.__name__,
+                            expected_compiler_class.__module__,
+                            expected_compiler_class.__name__,
+                        )
                     )
-                )
 
     def prepare_database(self):
         """Ran to prepare the configured database.
@@ -84,9 +86,7 @@ class DatabaseWrapper(Wrapper):
 
         super().prepare_database()
 
-        setup_ext = getattr(
-            settings, "POSTGRES_EXTRA_AUTO_EXTENSION_SET_UP", True
-        )
+        setup_ext = getattr(settings, "POSTGRES_EXTRA_AUTO_EXTENSION_SET_UP", True)
         if not setup_ext:
             return False
 
